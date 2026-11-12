@@ -1,9 +1,11 @@
-# Status-only security implementation
+# AMS SOFT Status deployment
 
-Work in progress. Not approved for deployment. Keep the Dokploy service quarantined.
+The owner authorized production deployment before a further production audit on 2026-11-12. This release adds a dedicated operator gateway: local password provisioning, Better Auth 1.7.22, SQLite, authenticator TOTP, secure cookies, one administrator and one-hour sessions. No mail server or public registration/recovery. A first-factor session cannot call connection routes. Enrollment requires the password and a valid TOTP; the browser signs out after enrollment before normal two-factor login.
 
-Implemented first patch: fail-closed HTTPS origin policy, public IPv4-only DNS resolution pinned to the actual TLS connection, redirects/proxies disabled, 15-second overall deadline, 32 MiB body limit, Status-only URL refusal; distinct setting/deletion permissions on legacy session mutations. Tests and CI must pass before release.
+Only the gateway is public. No general WAHA API, dashboard, chats, WebSocket or arbitrary proxy routes. The operator can start/check the default session and display its pairing QR. This delivery does not add video publication or scheduling. No WhatsApp Status is sent by deployment.
 
-Remaining: public Status-only module, Better Auth/TOTP/SQLite, private media namespace enforcement, live-subscription revocation, source-built GOWS profile, minimal image and gated publication, isolated regression checks, scan and Dokploy rollout. No production pairing/publication authorized by this patch.
+Existing hardening: pinned public IPv4 HTTPS media origin policy, no redirects/proxy, 15-second overall budget, 32 MiB response limit and no media URL fetch in AMSSOFT_STATUS_ONLY mode; legacy session permissions; bounded event authorization and delivery. CI checks project types, 26 targeted security tests and operator login/boundary tests before compiling and publishing a candidate image archive with a SHA256 checksum. Dokploy uses RAW with the immutable commit-tagged local image loaded from that archive. The build runs in GitHub Actions, not on the Dokploy VM.
 
-Vendored engines/gows is upstream v1.0.49; preserve its license and provenance. It is not yet wired into the release build.
+Runtime base: official GOWS 2026.10.1 pinned by digest. Node application output is rebuilt from this fork. The upstream Go binary and base dependencies remain in use; this is not a complete vulnerability remediation or a source rebuild of GOWS. The untracked local engines/gows tree is not part of this release. The WhatsApp protocol can deliver account messages to a linked device even with no chat interface. No webhooks or message automations are configured; incoming-media download and application message storage are disabled. This does not guarantee that the transport never receives private messages.
+
+Operator state and authentication secrets are persistent private host mounts, never in the repository/image. The administrator must enroll their own authenticator at first login. No automated real-account pairing or publication is performed by tests.

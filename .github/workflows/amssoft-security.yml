@@ -18,5 +18,47 @@ jobs:
           node-version: '24'
       - run: corepack enable
       - run: yarn install --immutable
+      - run: npm ci --prefix operator --ignore-scripts --no-audit --no-fund
+      - run: node --test operator/auth.test.mjs
       - run: yarn exec tsc --noEmit --incremental false
       - run: yarn test:unit --runInBand --runTestsByPath src/utils/fetch.test.ts src/utils/fetch.deadline.test.ts src/nestjs/ws/AuthorizedDelivery.test.ts src/core/services/SessionService.security.test.ts src/api/sessions.security.test.ts
+      - run: yarn build
+      - name: Package immutable production candidate
+        env:
+          SOURCE_REVISION: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p release-context/operator
+          cp Dockerfile.amssoft release-context/Dockerfile
+          cp -a dist release-context/dist
+          cp -a operator/node_modules release-context/operator/node_modules
+          cp operator/*.mjs operator/*.js operator/*.html operator/*.css operator/package*.json release-context/operator/
+          rm -f release-context/operator/auth.test.mjs
+          docker build --build-arg SOURCE_REVISION="$SOURCE_REVISION" -t "amssoft/waha-status:$SOURCE_REVISION" release-context
+          docker save "amssoft/waha-status:$SOURCE_REVISION" | gzip -1 > waha-status.tar.gz
+          sha256sum waha-status.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-candidate
+          path: |
+            waha-status.tar.gz
+            SHA256SUMS
+          compression-level: 0
+          retention-days: 3
+  release:
+    needs: validation
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'amssoft/status-security'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: production-candidate
+      - name: Publish verified candidate archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_REVISION: ${{ github.event.pull_request.head.sha }}
+        run: |
+          sha256sum --check SHA256SUMS
+          gh release create "candidate-$SOURCE_REVISION" waha-status.tar.gz SHA256SUMS --target "$SOURCE_REVISION" --prerelease --title "AMS SOFT Status $SOURCE_REVISION" --notes "Production candidate. Password and TOTP gateway; private WhatsApp backend. See docs/amssoft/IMPLEMENTATION.md for scope and limitations."
