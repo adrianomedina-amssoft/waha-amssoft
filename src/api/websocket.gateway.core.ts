@@ -113,6 +113,9 @@ export class WebsocketGatewayCore
       },
       (data) => {
         if (socket.readyState !== 1) throw new Error('Socket closed');
+        if (socket.bufferedAmount + Buffer.byteLength(data) > 4 * 1024 * 1024) {
+          throw new Error('Socket buffer limit reached');
+        }
         socket.send(data, (err) => {
           if (err) {
             delivery.dispose();

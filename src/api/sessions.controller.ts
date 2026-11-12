@@ -237,6 +237,7 @@ class SessionsController {
     CanSession(Action.Control, FromBody('name')),
     CanSession(Action.Setting, FromBody('name')),
   )
+  @UsePipes(new WAHAValidationPipe())
   async DEPRACATED_start(
     @Body() request: SessionStartDeprecatedRequest,
   ): Promise<SessionDTO> {
@@ -267,6 +268,7 @@ class SessionsController {
       return !request.body?.logout || CanSession(Action.Delete, FromBody('name'))(ability, context);
     },
   )
+  @UsePipes(new WAHAValidationPipe())
   async DEPRECATED_stop(
     @Body() request: SessionStopDeprecatedRequest,
   ): Promise<void> {
@@ -290,6 +292,7 @@ class SessionsController {
     CanSession(Action.Control, FromBody('name')),
     CanSession(Action.Delete, FromBody('name')),
   )
+  @UsePipes(new WAHAValidationPipe())
   async DEPRECATED_logout(
     @Body() request: SessionLogoutDeprecatedRequest,
   ): Promise<void> {
