@@ -233,7 +233,10 @@ class SessionsController {
       'Create session (if not exists) or update a config (if exists) and start it.',
     deprecated: true,
   })
-  @CheckPolicies(CanSession(Action.Control, FromBody('name')))
+  @CheckPolicies(
+    CanSession(Action.Control, FromBody('name')),
+    CanSession(Action.Setting, FromBody('name')),
+  )
   async DEPRACATED_start(
     @Body() request: SessionStartDeprecatedRequest,
   ): Promise<SessionDTO> {
@@ -257,7 +260,13 @@ class SessionsController {
     description: 'Stop session and Logout by default.',
     deprecated: true,
   })
-  @CheckPolicies(CanSession(Action.Control, FromBody('name')))
+  @CheckPolicies(
+    CanSession(Action.Control, FromBody('name')),
+    (ability, context) => {
+      const request = context.switchToHttp().getRequest();
+      return !request.body?.logout || CanSession(Action.Delete, FromBody('name'))(ability, context);
+    },
+  )
   async DEPRECATED_stop(
     @Body() request: SessionStopDeprecatedRequest,
   ): Promise<void> {
@@ -277,7 +286,10 @@ class SessionsController {
     description: 'Stop, Logout and Delete session.',
     deprecated: true,
   })
-  @CheckPolicies(CanSession(Action.Control, FromBody('name')))
+  @CheckPolicies(
+    CanSession(Action.Control, FromBody('name')),
+    CanSession(Action.Delete, FromBody('name')),
+  )
   async DEPRECATED_logout(
     @Body() request: SessionLogoutDeprecatedRequest,
   ): Promise<void> {
