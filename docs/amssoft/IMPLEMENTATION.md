@@ -15,3 +15,7 @@ Operator state and authentication secrets are persistent private host mounts, ne
 A FAILED GOWS session can remain loaded in the manager. The operator now calls restart for FAILED and start only for STOPPED, preserving device credentials and configuration. It returns the observed session state instead of unconditional success, rejects failed retries and serializes concurrent start requests. The browser polls while STARTING/SCAN_QR_CODE, refreshes the QR automatically, stops after WORKING/FAILED, and allows explicit regeneration after expiration through either button. It never performs automatic restart loops.
 
 The new HTML/JavaScript no longer embeds the operator's phone number. Optional expected-number comparison is configured only on the server via OPERATOR_EXPECTED_NUMBER and returned as a boolean after MFA. Earlier commits and previously published image archives can still contain the old value; this update does not purge historical copies.
+
+## HTTP parser audit mitigation
+
+Both JSON middleware instances reject compressed request bodies (`inflate: false`), following the official workaround for CVE-2026-111181 / GHSA-27r3-jxmh-p828 in the inherited body-parser dependency. The browser uses ordinary uncompressed JSON. Benign gzip/deflate/Brotli requests are rejected before decoding; the 4 KiB body limit remains enforced. This mitigation does not update or remove the vulnerable package from the image. The broad base-image dependency remediation is still pending; package scan results must not be described as a clean image.

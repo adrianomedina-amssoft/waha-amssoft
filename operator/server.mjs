@@ -16,7 +16,7 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
     next();
   });
   async function session(req) { return auth.api.getSession({ headers: fromNodeHeaders(req.headers) }); }
-  app.use('/auth', express.json({ limit: '4kb' }), async function authRoutes(req, res, next) {
+  app.use('/auth', express.json({ limit: '4kb', inflate: false }), async function authRoutes(req, res, next) {
     try {
       const allowed = { '/sign-in/email': 'POST', '/sign-out': 'POST', '/get-session': 'GET', '/two-factor/enable': 'POST', '/two-factor/verify-totp': 'POST' };
       if (allowed[req.path] !== req.method) return res.sendStatus(404);
@@ -43,7 +43,7 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
   app.get('/', function index(req, res) { res.type('html').send(readFileSync(new URL('./index.html', import.meta.url))); });
   app.get('/app.js', function javascript(req, res) { res.type('js').send(readFileSync(new URL('./app.js', import.meta.url))); });
   app.get('/style.css', function stylesheet(req, res) { res.type('css').send(readFileSync(new URL('./style.css', import.meta.url))); });
-  app.use(express.json({ limit: '4kb' }));
+  app.use(express.json({ limit: '4kb', inflate: false }));
   app.post('/setup/qr', async function setupQr(req, res, next) {
     try {
       const current = await session(req);
