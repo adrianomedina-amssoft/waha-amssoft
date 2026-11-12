@@ -1,9 +1,10 @@
 name: AMS SOFT security checks
 on:
-  push:
-    branches: [amssoft/status-security]
   pull_request:
     branches: [core]
+concurrency:
+  group: amssoft-security-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
