@@ -18,4 +18,4 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       - run: yarn exec tsc --noEmit --incremental false
-      - run: yarn test:unit --runInBand --runTestsByPath src/utils/fetch.test.ts
+      - run: yarn test:unit --runInBand --runTestsByPath src/utils/fetch.test.ts src/utils/fetch.deadline.test.ts src/nestjs/ws/AuthorizedDelivery.test.ts src/core/services/SessionService.security.test.ts

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { resolve4 } from 'dns/promises';
+import { Resolver } from 'dns/promises';
 import { Agent as HttpsAgent } from 'https';
 import { BlockList, isIP } from 'net';
 
@@ -27,37 +27,49 @@ export async function fetchBuffer(value: string): Promise<Buffer> {
       !hosts.includes(url.hostname.toLowerCase())) {
     throw new Error('Media origin is not permitted');
   }
-  const addresses = await resolve4(url.hostname);
-  const extraBlocked = (process.env.WAHA_MEDIA_BLOCKED_IPS || '').split(',');
-  if (!addresses.length || addresses.some((address) =>
-    isIP(address) !== 4 || blocked.check(address, 'ipv4') || extraBlocked.includes(address))) {
-    throw new Error('Media DNS destination is not permitted');
-  }
-  // Pin the validated address while preserving the original hostname for TLS/SNI.
-  const address = addresses[0];
-  const agent = new HttpsAgent({
-    rejectUnauthorized: true,
-    lookup: (hostname, options, callback) => {
-      if (hostname !== url.hostname) {
-        callback(new Error('Unexpected media hostname'), '', 4);
-        return;
-      }
-      if (options.all) {
-        callback(null, [{ address: address, family: 4 }]);
-      } else {
-        callback(null, address, 4);
-      }
-    },
+  const resolver = new Resolver({ timeout: 15_000, tries: 1 });
+  const controller = new AbortController();
+  const aborted = new Promise<never>((resolve, reject) => {
+    controller.signal.addEventListener('abort', () => {
+      resolver.cancel();
+      reject(new Error('Media operation exceeded its 15-second deadline'));
+    }, { once: true });
   });
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  let agent: HttpsAgent | undefined;
   try {
-    const response = await axios.get(url.href, {
+    const addresses = await Promise.race([resolver.resolve4(url.hostname), aborted]);
+    const extraBlocked = (process.env.WAHA_MEDIA_BLOCKED_IPS || '').split(',');
+    if (!addresses.length || addresses.some((address) =>
+      isIP(address) !== 4 || blocked.check(address, 'ipv4') || extraBlocked.includes(address))) {
+      throw new Error('Media DNS destination is not permitted');
+    }
+    // Pin the validated address while preserving the original hostname for TLS/SNI.
+    const address = addresses[0];
+    agent = new HttpsAgent({
+      rejectUnauthorized: true,
+      lookup: (hostname, options, callback) => {
+        if (hostname !== url.hostname) {
+          callback(new Error('Unexpected media hostname'), '', 4);
+          return;
+        }
+        if (options.all) {
+          callback(null, [{ address: address, family: 4 }]);
+        } else {
+          callback(null, address, 4);
+        }
+      },
+    });
+    const response = await Promise.race([axios.get(url.href, {
       responseType: 'arraybuffer', httpsAgent: agent, proxy: false,
       timeout: 15_000, maxRedirects: 0,
       maxContentLength: 32 * 1024 * 1024, maxBodyLength: 32 * 1024 * 1024,
-      signal: AbortSignal.timeout(15_000),
-    });
+      signal: controller.signal,
+    }), aborted]);
     return Buffer.from(response.data);
   } finally {
-    agent.destroy();
+    clearTimeout(timer);
+    resolver.cancel();
+    agent?.destroy();
   }
 }

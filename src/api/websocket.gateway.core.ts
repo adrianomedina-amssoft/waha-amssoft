@@ -1,3 +1,4 @@
+import { AuthorizedDelivery } from '@waha/nestjs/ws/AuthorizedDelivery';
 import {
   BeforeApplicationShutdown,
   Logger,
@@ -104,23 +105,33 @@ export class WebsocketGatewayCore
       `Client connected to session: '${session}', events: ${events}, ${socket.id}`,
     );
 
-    const sub = this.manager
-      .getSessionEvents(session, events)
-      .subscribe((data) => {
-        setImmediate(() => {
-          this.logger.debug(
-            `Sending data to client, event.id: ${data.id}`,
-            data,
-          );
-          socket.send(JSON.stringify(data), (err) => {
-            if (!err) {
-              return;
-            }
-            this.logger.error(`Error sending data to client: ${err}`);
-          });
+    const delivery = new AuthorizedDelivery(
+      async () => {
+        const currentUser = await this.auth.validateRequest(request);
+        return !!currentUser && this.casl.createForUser(currentUser)
+          .can(Action.Read, new SessionName(session));
+      },
+      (data) => {
+        if (socket.readyState !== 1) throw new Error('Socket closed');
+        socket.send(data, (err) => {
+          if (err) {
+            delivery.dispose();
+            socket.close(WebSocketCloseCode.INTERNAL_ERROR, 'Delivery failed');
+          }
         });
-      });
+      },
+      (reason) => socket.close(WebSocketCloseCode.POLICY_VIOLATION, reason),
+    );
+    const sub = this.manager.getSessionEvents(session, events).subscribe((data) => {
+      try {
+        delivery.enqueue(JSON.stringify(data));
+      } catch {
+        delivery.dispose();
+        socket.close(WebSocketCloseCode.INTERNAL_ERROR, 'Invalid event');
+      }
+    });
     socket.on('close', () => {
+      delivery.dispose();
       this.logger.debug(`Client disconnected - ${socket.id}`);
       sub.unsubscribe();
     });

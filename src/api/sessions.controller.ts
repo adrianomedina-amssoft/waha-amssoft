@@ -228,9 +228,9 @@ class SessionsController {
 
   @Post('/start/')
   @ApiOperation({
-    summary: 'Upsert and Start session',
+    summary: 'Configure and start an existing session',
     description:
-      'Create session (if not exists) or update a config (if exists) and start it.',
+      'Update an existing session configuration and start it. Creation requires POST /api/sessions.',
     deprecated: true,
   })
   @CheckPolicies(
