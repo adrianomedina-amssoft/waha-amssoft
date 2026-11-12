@@ -9,3 +9,9 @@ Existing hardening: pinned public IPv4 HTTPS media origin policy, no redirects/p
 Runtime base: official GOWS 2026.10.1 pinned by digest. Node application output is rebuilt from this fork. The upstream Go binary and base dependencies remain in use; this is not a complete vulnerability remediation or a source rebuild of GOWS. The untracked local engines/gows tree is not part of this release. The WhatsApp protocol can deliver account messages to a linked device even with no chat interface. No webhooks or message automations are configured; incoming-media download and application message storage are disabled. This does not guarantee that the transport never receives private messages.
 
 Operator state and authentication secrets are persistent private host mounts, never in the repository/image. The administrator must enroll their own authenticator at first login. No automated real-account pairing or publication is performed by tests.
+
+## QR recovery update
+
+A FAILED GOWS session can remain loaded in the manager. The operator now calls restart for FAILED and start only for STOPPED, preserving device credentials and configuration. It returns the observed session state instead of unconditional success, rejects failed retries and serializes concurrent start requests. The browser polls while STARTING/SCAN_QR_CODE, refreshes the QR automatically, stops after WORKING/FAILED, and allows explicit regeneration after expiration through either button. It never performs automatic restart loops.
+
+The new HTML/JavaScript no longer embeds the operator's phone number. Optional expected-number comparison is configured only on the server via OPERATOR_EXPECTED_NUMBER and returned as a boolean after MFA. Earlier commits and previously published image archives can still contain the old value; this update does not purge historical copies.

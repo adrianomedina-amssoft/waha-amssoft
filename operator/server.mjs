@@ -6,7 +6,7 @@ import QRCode from 'qrcode';
 import { openAuth, operatorAllowed } from './auth.mjs';
 const require = createRequire(import.meta.url);
 const express = require('express');
-export async function createOperator({ auth, administratorId, origin, upstream, apiKey }) {
+export async function createOperator({ auth, administratorId, origin, upstream, apiKey, expectedNumber }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(function securityHeaders(req, res, next) {
@@ -64,21 +64,34 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
     if (!response.ok) { const error = new Error('WhatsApp backend unavailable'); error.status = response.status; throw error; }
     return response.json();
   }
+  function connectionState(result) {
+    if (!['STOPPED', 'STARTING', 'SCAN_QR_CODE', 'WORKING', 'FAILED'].includes(result.status)) throw new Error('Invalid connection state');
+    const number = result.me?.id?.split('@')[0] || null;
+    return { status: result.status, number: number, unexpectedNumber: !!(expectedNumber && number && number !== expectedNumber) };
+  }
   app.get('/connection', async function connection(req, res, next) {
-    try { const result = await backend('/api/sessions/default'); res.json({ status: result.status, number: result.me?.id?.split('@')[0] || null }); }
+    try { res.json(connectionState(await backend('/api/sessions/default'))); }
     catch (error) { if (error.status === 404) return res.json({ status: 'STOPPED', number: null }); next(error); }
   });
+  let starting = false;
   app.post('/connection/start', async function start(req, res, next) {
+    if (starting) return res.status(409).json({ error: 'Uma conexão já está sendo preparada. Aguarde.' });
+    starting = true;
     try {
       let existing;
       try { existing = await backend('/api/sessions/default'); } catch (error) { if (error.status !== 404) throw error; }
-      if (!existing) await backend('/api/sessions', 'POST', { name: 'default', start: true, config: {
+      let result = existing;
+      if (!existing) result = await backend('/api/sessions', 'POST', { name: 'default', start: true, config: {
         webhooks: [], ignore: { status: true, groups: true, channels: true, broadcast: true },
-        gows: { storage: { messages: false, chats: false, labels: false } },
+        gows: { storage: { messages: false, groups: false, chats: false, labels: false, contacts: true, messageSecrets: false } },
       } });
-      else if (existing.status === 'STOPPED' || existing.status === 'FAILED') await backend('/api/sessions/default/start', 'POST', {});
-      res.json({ ok: true });
+      else if (existing.status === 'FAILED') result = await backend('/api/sessions/default/restart', 'POST', {});
+      else if (existing.status === 'STOPPED') result = await backend('/api/sessions/default/start', 'POST', {});
+      const state = connectionState(result);
+      if (state.status === 'FAILED') return res.status(503).json({ error: 'Não foi possível gerar um novo QR Code. Tente conectar novamente.' });
+      res.json(state);
     } catch (error) { next(error); }
+    finally { starting = false; }
   });
   app.get('/connection/qr', async function pairing(req, res, next) {
     try {
@@ -98,7 +111,7 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   const { auth } = await openAuth({ filename: join(directory, 'auth.sqlite'), origin: origin,
     secret: readFileSync(process.env.OPERATOR_SECRET_FILE, 'utf8').trim() });
   const app = await createOperator({ auth: auth, administratorId: state.administratorId, origin: origin,
-    upstream: 'http://waha:3000', apiKey: readFileSync(process.env.WAHA_API_KEY_FILE, 'utf8').trim() });
+    upstream: 'http://waha:3000', apiKey: readFileSync(process.env.WAHA_API_KEY_FILE, 'utf8').trim(), expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER });
   const server = app.listen(8080, '0.0.0.0', function listening() { console.log('AMS SOFT Status operator listening on 8080'); });
   server.requestTimeout = 30000; server.headersTimeout = 15000;
 }

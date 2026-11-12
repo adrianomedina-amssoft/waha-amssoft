@@ -4,5 +4,5 @@
   "private": true,
   "type": "module",
   "dependencies": { "better-auth": "1.7.22", "qrcode": "1.5.4" },
-  "scripts": { "test": "node --test auth.test.mjs" }
+  "scripts": { "test": "node --test *.test.mjs" }
 }

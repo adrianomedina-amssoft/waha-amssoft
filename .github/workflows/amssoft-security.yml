@@ -19,7 +19,7 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       - run: npm ci --prefix operator --ignore-scripts --no-audit --no-fund
-      - run: node --test operator/auth.test.mjs
+      - run: node --test operator/*.test.mjs
       - run: yarn exec tsc --noEmit --incremental false
       - run: yarn test:unit --runInBand --runTestsByPath src/utils/fetch.test.ts src/utils/fetch.deadline.test.ts src/nestjs/ws/AuthorizedDelivery.test.ts src/core/services/SessionService.security.test.ts src/api/sessions.security.test.ts
       - run: yarn build
@@ -32,7 +32,7 @@ jobs:
           cp -a dist release-context/dist
           cp -a operator/node_modules release-context/operator/node_modules
           cp operator/*.mjs operator/*.js operator/*.html operator/*.css operator/package*.json release-context/operator/
-          rm -f release-context/operator/auth.test.mjs
+          rm -f release-context/operator/*.test.mjs
           docker build --build-arg SOURCE_REVISION="$SOURCE_REVISION" -t "amssoft/waha-status:$SOURCE_REVISION" release-context
           docker save "amssoft/waha-status:$SOURCE_REVISION" | gzip -1 > waha-status.tar.gz
           sha256sum waha-status.tar.gz > SHA256SUMS
