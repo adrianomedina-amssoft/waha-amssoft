@@ -19,3 +19,7 @@ The new HTML/JavaScript no longer embeds the operator's phone number. Optional e
 ## HTTP parser audit mitigation
 
 Both JSON middleware instances reject compressed request bodies (`inflate: false`), following the official workaround for CVE-2026-111181 / GHSA-27r3-jxmh-p828 in the inherited body-parser dependency. The browser uses ordinary uncompressed JSON. Benign gzip/deflate/Brotli requests are rejected before decoding; the 4 KiB body limit remains enforced. This mitigation does not update or remove the vulnerable package from the image. The broad base-image dependency remediation is still pending; package scan results must not be described as a clean image.
+
+## Status publication and Postiz bridge
+
+The operator now has a persistent SQLite publication queue, local MP4 catalog, manual/scheduled publication, daily recurrence, and a history distinguishing server confirmation, owner confirmation, preflight waiting and unknown outcomes. It permits only the privately configured account and one active send. Message ids are persisted before calling WhatsApp; uncertain outcomes are never automatically resent. The private media roots are read-only mounts, with traversal/symlink/type/size checks. Automation uses a separate runtime-mounted token; human publication controls remain behind password and TOTP. The Postiz whatsapp-status provider creates idempotent jobs and polls until publication is confirmed. No chat or group send route is exposed.

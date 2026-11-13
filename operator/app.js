@@ -67,7 +67,7 @@ async function startConnection() {
   return connection();
 }
 async function panel() {
-  element('login').hidden = true; element('totp').hidden = true; element('setup').hidden = true; element('panel').hidden = false; await connection();
+  element('login').hidden = true; element('totp').hidden = true; element('setup').hidden = true; element('panel').hidden = false; await connection(); if (element('publishing')) await loadStatus(true);
 }
 function run(task) { return async function handler(event) {
   event?.preventDefault(); if (busy) return; busy = true; buttons(); message('');
@@ -99,3 +99,34 @@ element('refresh').addEventListener('click', run(async function refresh() {
 }));
 element('logout').addEventListener('click', run(async function logout() { stopPolling(); await api('/auth/sign-out', {}); location.reload(); }));
 (async function restore() { try { const current = await api('/auth/get-session'); if (current?.session?.operatorMfa && current.user?.twoFactorEnabled) await panel(); } catch (error) { message(error.message); } })();
+
+let statusLoaded = false;
+let statusIntent = null;
+async function loadStatus(initial = false) {
+  const data = await api('/status'); const select = element('video');
+  const signature = data.assets.map(a=>a.file).join('|');
+  if (select.dataset.signature !== signature) { const previous = select.value; select.replaceChildren(); for (const asset of data.assets) { const option=document.createElement('option'); option.value=asset.file; option.textContent=asset.name+' ('+(asset.bytes/1048576).toFixed(1)+' MiB)'; select.append(option); } if(data.assets.some(a=>a.file===previous))select.value=previous; select.dataset.signature=signature; }
+  if (initial || !statusLoaded) { element('daily-enabled').checked=!!data.config.enabled; element('daily-hour').value=data.config.start_hour; element('daily-interval').value=data.config.interval_minutes; statusLoaded=true; }
+  const labels={QUEUED:'Agendado',WAITING:'Aguardando conexão',SENDING:'Enviando — sem confirmação ainda',SENT:'Confirmado pelo servidor',CONFIRMED:'Confirmado no celular',UNKNOWN:'Verificar resultado no celular',FAILED:'Falha'};
+  const container=element('jobs'); container.replaceChildren();
+  for(const job of data.jobs) { const row=document.createElement('article'); row.className='job'; const title=document.createElement('strong'); title.textContent=job.file; row.append(title);
+    const info=document.createElement('p');info.textContent=new Date(job.due).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' · '+(labels[job.state]||job.state);row.append(info);
+    if(job.error){const detail=document.createElement('p');detail.textContent=job.error;row.append(detail);}
+    if(job.state==='UNKNOWN')for(const [action,label]of [['confirmed','Já apareceu no celular'],['not-sent','Não foi publicado']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',run(async function resolve(){await api('/status/resolve',{id:job.id,action:action});await loadStatus();}));row.append(button);}
+    container.append(row);
+  }
+}
+async function submitStatus(immediate) {
+  const file=element('video').value;if(!file)throw new Error('Selecione um vídeo da biblioteca.');
+  const due=immediate?Date.now():Date.parse(element('publish-at').value+'-03:00');if(!Number.isSafeInteger(due)||(!immediate&&due<Date.now()))throw new Error('Escolha uma data futura.');
+  const caption=element('caption').value;const key=file+'|'+(immediate?'now':due)+'|'+caption;
+  if(!statusIntent||statusIntent.key!==key)statusIntent={key:key,id:crypto.randomUUID()};
+  await api('/status/jobs',{requestId:statusIntent.id,file:file,due:due,caption:caption});statusIntent=null;
+  message('Vídeo na fila. A confirmação será mostrada no histórico.');await loadStatus();
+}
+if(element('publishing')) {
+  element('publish-now').addEventListener('click',run(async function publish(){await submitStatus(true);}));
+  element('schedule-video').addEventListener('click',run(async function schedule(){await submitStatus(false);}));
+  element('save-daily').addEventListener('click',run(async function save(){await api('/status/config',{enabled:element('daily-enabled').checked,interval_minutes:Number(element('daily-interval').value),start_hour:Number(element('daily-hour').value)});message('Programação diária salva.');await loadStatus();}));
+  setInterval(function updateJobs(){if(!element('panel').hidden)loadStatus().catch(function error(e){if(e.status===401)loginRequired();else message(e.message);});},10000);
+}
