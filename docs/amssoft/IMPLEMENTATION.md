@@ -31,3 +31,9 @@ Postiz owns the calendar and recurrence. The operator has no media catalogue, ma
 At publication time, Postiz calls POST /automation/jobs with only id, file (relative to the read-only Postiz upload volume), and optional caption. Any scheduling/additional fields are rejected. The bridge persists the request and sends as soon as the configured account is available; it does not choose a new publication date. GET job status feeds the Postiz pending-publication workflow. Request identity is immutable; independent occurrences are not merged by content/time.
 
 The folder discovery script belongs to Postiz deployment automation, outside this bridge, and creates native Postiz recurring posts. Preserve its existing post IDs/state when moving it. Runtime must not mount the source advertising folder into the operator. Old manual scheduling routes return 404. Legacy database rows/tables may remain for history and rollback but no active code uses them as a calendar.
+
+## Authorized group publishing
+
+POST /automation/group-jobs accepts only id, file, caption and optional groupIds, never scheduling fields. Targets must be in a private runtime policy. Omitting groupIds uses the authorized snapshot. Group metadata is used for destination validation; messages/chats/webhooks and incoming message stream handling remain disabled in send-only mode. Only POST sendImage/sendVideo is used for delivery; no group member administration or history endpoint is exposed.
+
+Each batch has durable per-group receipts with message IDs persisted before dispatch. Confirmed targets are not resent on retries. Unknown results require per-target operator reconciliation. Jobs still waiting beyond the bridge processing window expire rather than publishing much later. Postiz owns all dates and the media rotation.

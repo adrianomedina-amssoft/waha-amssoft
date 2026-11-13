@@ -198,6 +198,11 @@ export class WebjsConfig {
 }
 
 export class IgnoreConfig {
+  @ApiProperty({ description: 'Ignore direct-message events' })
+  @IsBoolean()
+  @IsOptional()
+  dm?: boolean;
+
   @ApiProperty({
     description: 'Ignore a status@broadcast (stories) events',
   })

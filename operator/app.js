@@ -107,7 +107,14 @@ async function loadStatus() {
   for(const job of data.jobs) { const row=document.createElement('article'); row.className='job'; const title=document.createElement('strong'); title.textContent=job.file; row.append(title);
     const info=document.createElement('p');info.textContent=new Date(job.receivedAt).toLocaleString('pt-BR',{timeZone:data.timezone})+' · '+(labels[job.state]||job.state);row.append(info);
     if(job.error){const detail=document.createElement('p');detail.textContent=job.error;row.append(detail);}
-    if(job.state==='UNKNOWN')for(const [action,label]of [['confirmed','Já apareceu no celular'],['not-sent','Não foi publicado']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',run(async function resolve(){await api('/status/resolve',{id:job.id,action:action});await loadStatus();}));row.append(button);}
+    if(job.kind!=='groups' && job.state==='UNKNOWN')for(const [action,label]of [['confirmed','Já apareceu no celular'],['not-sent','Não foi publicado']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',run(async function resolve(){await api('/status/resolve',{id:job.id,action:action});await loadStatus();}));row.append(button);}
+    if(job.kind==='groups') {
+      const summary=document.createElement('p');summary.textContent='Grupos: '+job.summary.sent+'/'+job.summary.total+' confirmados; '+job.summary.failed+' falhas; '+job.summary.unknown+' sem confirmação';row.append(summary);
+      for(const delivery of job.deliveries.filter(d=>['UNKNOWN','FAILED'].includes(d.state))) {
+        const detail=document.createElement('p');detail.textContent=delivery.title+' · '+delivery.state+' · '+(delivery.error||'');row.append(detail);
+        if(delivery.state==='UNKNOWN')for(const [action,label]of [['confirmed','Envio confirmado neste grupo'],['not-sent','Não publicado neste grupo']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',run(async function resolveGroup(){await api('/status/resolve',{id:job.id,kind:'groups',groupId:delivery.groupId,action:action});await loadStatus();}));row.append(button);}
+      }
+    }
     container.append(row);
   }
 }

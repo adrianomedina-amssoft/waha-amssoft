@@ -5,9 +5,10 @@ import { fromNodeHeaders } from 'better-auth/node';
 import QRCode from 'qrcode';
 import { openAuth, operatorAllowed } from './auth.mjs';
 import { StatusService } from './status-service.mjs';
+import { GroupService } from './group-service.mjs';
 const require = createRequire(import.meta.url);
 const express = require('express');
-export async function createOperator({ auth, administratorId, origin, upstream, apiKey, expectedNumber, statusService, timezone = 'America/Porto_Velho' }) {
+export async function createOperator({ auth, administratorId, origin, upstream, apiKey, expectedNumber, statusService, groupService, timezone = 'America/Porto_Velho' }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(function securityHeaders(req, res, next) {
@@ -76,10 +77,10 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
   });
   app.get('/status', function overview(req, res) {
     if (!statusService) return res.sendStatus(503);
-    res.json({ jobs: statusService.list(), timezone: timezone });
+    res.json({ jobs: [...statusService.list(), ...(groupService ? groupService.list() : [])].sort(function newest(a,b) { return b.receivedAt-a.receivedAt; }), timezone: timezone });
   });
   app.post('/status/resolve', function resolveJob(req, res) {
-    try { if (!statusService) return res.sendStatus(503); res.json(statusService.resolveUnknown(req.body.id, req.body.action)); } catch (error) { res.status(400).json({ error: error.message }); }
+    try { if (!statusService) return res.sendStatus(503); res.json(req.body.kind === 'groups' && groupService ? groupService.resolve(req.body.id, req.body.groupId, req.body.action) : statusService.resolveUnknown(req.body.id, req.body.action)); } catch (error) { res.status(400).json({ error: error.message }); }
   });
   app.use('/automation', function automationAuth(req, res, next) {
     if (!statusService || !statusService.authenticate(req.headers.authorization)) return res.sendStatus(401); next();
@@ -91,6 +92,9 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
       res.status(202).json(statusService.enqueue({ source: 'postiz:' + req.body.id, file: req.body.file, caption: req.body.caption || '' }));
     } catch (error) { res.status(400).json({ error: error.message }); }
   });
+  app.get('/automation/groups', function allowedGroups(req,res) { if(!groupService)return res.sendStatus(503);res.json(groupService.catalog()); });
+  app.post('/automation/group-jobs', function groupRequest(req,res) { try { if(!groupService)return res.sendStatus(503);res.status(202).json(groupService.enqueue(req.body)); } catch(error) { res.status(400).json({error:error.message}); } });
+  app.get('/automation/group-jobs/:id', function groupReceipt(req,res) { const job=groupService?.job(req.params.id);if(!job)return res.sendStatus(404);res.json(job); });
   app.get('/automation/jobs/:id', function automationJob(req, res) { const job = statusService.job(req.params.id); if (!job) return res.sendStatus(404); res.json(job); });
   let starting = false;
   app.post('/connection/start', async function start(req, res, next) {
@@ -101,8 +105,8 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
       try { existing = await backend('/api/sessions/default'); } catch (error) { if (error.status !== 404) throw error; }
       let result = existing;
       if (!existing) result = await backend('/api/sessions', 'POST', { name: 'default', start: true, config: {
-        webhooks: [], ignore: { status: true, groups: true, channels: true, broadcast: true },
-        gows: { storage: { messages: false, groups: false, chats: false, labels: false, contacts: true, messageSecrets: false } },
+        webhooks: [], ignore: { status: true, groups: true, channels: true, broadcast: true, dm: true },
+        gows: { storage: { messages: false, groups: true, chats: false, labels: false, contacts: true, messageSecrets: false } },
       } });
       else if (existing.status === 'FAILED') result = await backend('/api/sessions/default/restart', 'POST', {});
       else if (existing.status === 'STOPPED') result = await backend('/api/sessions/default/start', 'POST', {});
@@ -136,8 +140,11 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
     if (!response.ok) throw new Error('WhatsApp HTTP ' + response.status); return response.json();
   }
   const statusService = new StatusService({ filename: join(directory, 'status.sqlite'), directories: { postiz: '/postiz-media' }, backend: statusBackend, expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER, token: readFileSync(process.env.POSTIZ_STATUS_TOKEN_FILE, 'utf8').trim() });
-  const app = await createOperator({ auth: auth, administratorId: state.administratorId, origin: origin, upstream: 'http://waha:3000', apiKey: key, expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER, statusService: statusService, timezone: process.env.DISPLAY_TIMEZONE || 'America/Porto_Velho' });
-  const worker = setInterval(function statusTick() { statusService.tick().catch(function workerError(error) { console.error('Status worker:', error.message); }); }, 15000); worker.unref();
+  const groupPolicy = process.env.WHATSAPP_GROUPS_POLICY_FILE ? JSON.parse(readFileSync(process.env.WHATSAPP_GROUPS_POLICY_FILE,'utf8')) : { groups: [] };
+  const groupService = new GroupService({ filename: join(directory,'groups.sqlite'), directory: '/postiz-media', backend: statusBackend, expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER, groups: groupPolicy.groups });
+  const app = await createOperator({ auth: auth, administratorId: state.administratorId, origin: origin, upstream: 'http://waha:3000', apiKey: key, expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER, statusService: statusService, groupService: groupService, timezone: process.env.DISPLAY_TIMEZONE || 'America/Porto_Velho' });
+  let dispatching = false;
+  const worker = setInterval(async function bridgeTick() { if(dispatching)return;dispatching=true;try { await statusService.tick();await groupService.tick(); } catch(error) { console.error('Bridge worker:',error.message); } finally { dispatching=false; } },1000);worker.unref();
   const server = app.listen(8080, '0.0.0.0', function listening() { console.log('AMS SOFT Status operator listening on 8080'); });
   server.requestTimeout = 30000; server.headersTimeout = 15000;
 }
