@@ -7,7 +7,7 @@ import { openAuth, operatorAllowed } from './auth.mjs';
 import { StatusService } from './status-service.mjs';
 const require = createRequire(import.meta.url);
 const express = require('express');
-export async function createOperator({ auth, administratorId, origin, upstream, apiKey, expectedNumber, statusService }) {
+export async function createOperator({ auth, administratorId, origin, upstream, apiKey, expectedNumber, statusService, timezone = 'America/Porto_Velho' }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(function securityHeaders(req, res, next) {
@@ -76,13 +76,7 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
   });
   app.get('/status', function overview(req, res) {
     if (!statusService) return res.sendStatus(503);
-    res.json({ assets: statusService.catalog(), jobs: statusService.list(), agenda: statusService.agenda(), config: statusService.config() });
-  });
-  app.post('/status/jobs', function enqueue(req, res, next) {
-    try { if (!statusService) return res.sendStatus(503); const job = statusService.enqueue({ source: 'manual:' + req.body.requestId, namespace: 'ads', file: req.body.file, due: req.body.dueLocal ? statusService.localTimestamp(req.body.dueLocal) : req.body.due, caption: req.body.caption || '' }); res.status(202).json(job); } catch (error) { res.status(400).json({ error: error.message }); }
-  });
-  app.post('/status/config', function configure(req, res) {
-    try { if (!statusService) return res.sendStatus(503); res.json(statusService.configure(req.body)); } catch (error) { res.status(400).json({ error: error.message }); }
+    res.json({ jobs: statusService.list(), timezone: timezone });
   });
   app.post('/status/resolve', function resolveJob(req, res) {
     try { if (!statusService) return res.sendStatus(503); res.json(statusService.resolveUnknown(req.body.id, req.body.action)); } catch (error) { res.status(400).json({ error: error.message }); }
@@ -92,7 +86,10 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
   });
   app.get('/automation/account', async function automationAccount(req, res, next) { try { const state = await statusService.backend('/api/sessions/default'); res.json({ ready: state.status === 'WORKING' && state.me?.id?.split('@')[0] === expectedNumber }); } catch (error) { next(error); } });
   app.post('/automation/jobs', function automationEnqueue(req, res) {
-    try { res.status(202).json(statusService.enqueue({ source: 'postiz:' + req.body.id, namespace: 'postiz', file: req.body.file, due: Date.now(), caption: req.body.caption || '' })); } catch (error) { res.status(400).json({ error: error.message }); }
+    try {
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).some(function unsupported(key) { return !['id','file','caption'].includes(key); })) throw new Error('A ponte não aceita agendamento; programe a publicação no Postiz');
+      res.status(202).json(statusService.enqueue({ source: 'postiz:' + req.body.id, file: req.body.file, caption: req.body.caption || '' }));
+    } catch (error) { res.status(400).json({ error: error.message }); }
   });
   app.get('/automation/jobs/:id', function automationJob(req, res) { const job = statusService.job(req.params.id); if (!job) return res.sendStatus(404); res.json(job); });
   let starting = false;
@@ -138,8 +135,8 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
     const response = await fetch('http://waha:3000' + path, { method: method, redirect: 'error', signal: AbortSignal.timeout(timeout), headers: { 'X-Api-Key': key, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (!response.ok) throw new Error('WhatsApp HTTP ' + response.status); return response.json();
   }
-  const statusService = new StatusService({ filename: join(directory, 'status.sqlite'), directories: { ads: '/media', postiz: '/postiz-media' }, backend: statusBackend, expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER, token: readFileSync(process.env.POSTIZ_STATUS_TOKEN_FILE, 'utf8').trim(), timezone: process.env.STATUS_TIMEZONE || 'America/Sao_Paulo', externalScheduler: process.env.STATUS_EXTERNAL_SCHEDULER === 'true' });
-  const app = await createOperator({ auth: auth, administratorId: state.administratorId, origin: origin, upstream: 'http://waha:3000', apiKey: key, expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER, statusService: statusService });
+  const statusService = new StatusService({ filename: join(directory, 'status.sqlite'), directories: { postiz: '/postiz-media' }, backend: statusBackend, expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER, token: readFileSync(process.env.POSTIZ_STATUS_TOKEN_FILE, 'utf8').trim() });
+  const app = await createOperator({ auth: auth, administratorId: state.administratorId, origin: origin, upstream: 'http://waha:3000', apiKey: key, expectedNumber: process.env.OPERATOR_EXPECTED_NUMBER, statusService: statusService, timezone: process.env.DISPLAY_TIMEZONE || 'America/Porto_Velho' });
   const worker = setInterval(function statusTick() { statusService.tick().catch(function workerError(error) { console.error('Status worker:', error.message); }); }, 15000); worker.unref();
   const server = app.listen(8080, '0.0.0.0', function listening() { console.log('AMS SOFT Status operator listening on 8080'); });
   server.requestTimeout = 30000; server.headersTimeout = 15000;

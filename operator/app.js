@@ -67,7 +67,7 @@ async function startConnection() {
   return connection();
 }
 async function panel() {
-  element('login').hidden = true; element('totp').hidden = true; element('setup').hidden = true; element('panel').hidden = false; await connection(); if (element('publishing')) await loadStatus(true);
+  element('login').hidden = true; element('totp').hidden = true; element('setup').hidden = true; element('panel').hidden = false; await connection(); if (element('bridge-history')) await loadStatus();
 }
 function run(task) { return async function handler(event) {
   event?.preventDefault(); if (busy) return; busy = true; buttons(); message('');
@@ -100,34 +100,17 @@ element('refresh').addEventListener('click', run(async function refresh() {
 element('logout').addEventListener('click', run(async function logout() { stopPolling(); await api('/auth/sign-out', {}); location.reload(); }));
 (async function restore() { try { const current = await api('/auth/get-session'); if (current?.session?.operatorMfa && current.user?.twoFactorEnabled) await panel(); } catch (error) { message(error.message); } })();
 
-let statusLoaded = false;
-let statusIntent = null;
-async function loadStatus(initial = false) {
-  const data = await api('/status'); element('status-timezone').textContent=({'America/Porto_Velho':'Rondônia','America/Sao_Paulo':'São Paulo'}[data.config.timezone]||data.config.timezone); const select = element('video');
-  const signature = data.assets.map(a=>a.file).join('|');
-  if (select.dataset.signature !== signature) { const previous = select.value; select.replaceChildren(); for (const asset of data.assets) { const option=document.createElement('option'); option.value=asset.file; option.textContent=asset.name+' ('+(asset.bytes/1048576).toFixed(1)+' MiB)'; select.append(option); } if(data.assets.some(a=>a.file===previous))select.value=previous; select.dataset.signature=signature; }
-  if (initial || !statusLoaded) { element('daily-enabled').checked=!!data.config.enabled; element('daily-hour').value=data.config.start_hour; element('daily-interval').value=data.config.interval_minutes; statusLoaded=true; }
-  const agenda=element('native-agenda');agenda.replaceChildren();for(const entry of (data.agenda||[])){const p=document.createElement('p');p.textContent=entry.file+' · '+entry.localTime+' · '+(entry.repeat?'Repete diariamente no Postiz':'Agendado no Postiz');agenda.append(p);}
-  const labels={QUEUED:'Agendado',WAITING:'Aguardando conexão',SENDING:'Enviando — sem confirmação ainda',SENT:'Confirmado pelo servidor',CONFIRMED:'Confirmado no celular',UNKNOWN:'Verificar resultado no celular',FAILED:'Falha'};
+async function loadStatus() {
+  const data = await api('/status');
+  const labels={QUEUED:'Recebido do Postiz',WAITING:'Aguardando conexão',SENDING:'Enviando — sem confirmação ainda',SENT:'Confirmado pelo servidor',CONFIRMED:'Confirmado no celular',UNKNOWN:'Verificar resultado no celular',FAILED:'Falha'};
   const container=element('jobs'); container.replaceChildren();
   for(const job of data.jobs) { const row=document.createElement('article'); row.className='job'; const title=document.createElement('strong'); title.textContent=job.file; row.append(title);
-    const info=document.createElement('p');info.textContent=new Date(job.due).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' · '+(labels[job.state]||job.state);row.append(info);
+    const info=document.createElement('p');info.textContent=new Date(job.receivedAt).toLocaleString('pt-BR',{timeZone:data.timezone})+' · '+(labels[job.state]||job.state);row.append(info);
     if(job.error){const detail=document.createElement('p');detail.textContent=job.error;row.append(detail);}
     if(job.state==='UNKNOWN')for(const [action,label]of [['confirmed','Já apareceu no celular'],['not-sent','Não foi publicado']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',run(async function resolve(){await api('/status/resolve',{id:job.id,action:action});await loadStatus();}));row.append(button);}
     container.append(row);
   }
 }
-async function submitStatus(immediate) {
-  const file=element('video').value;if(!file)throw new Error('Selecione um vídeo da biblioteca.');
-  const due=Date.now();const dueLocal=immediate?undefined:element('publish-at').value;if(!immediate&&!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dueLocal))throw new Error('Escolha uma data futura.');
-  const caption=element('caption').value;const key=file+'|'+(immediate?'now':dueLocal)+'|'+caption;
-  if(!statusIntent||statusIntent.key!==key)statusIntent={key:key,id:crypto.randomUUID()};
-  await api('/status/jobs',{requestId:statusIntent.id,file:file,due:due,dueLocal:dueLocal,caption:caption});statusIntent=null;
-  message('Vídeo na fila. A confirmação será mostrada no histórico.');await loadStatus();
-}
-if(element('publishing')) {
-  element('publish-now').addEventListener('click',run(async function publish(){await submitStatus(true);}));
-  element('schedule-video').addEventListener('click',run(async function schedule(){await submitStatus(false);}));
-  element('save-daily').addEventListener('click',run(async function save(){await api('/status/config',{enabled:element('daily-enabled').checked,interval_minutes:Number(element('daily-interval').value),start_hour:Number(element('daily-hour').value)});message('Programação salva. O calendário do Postiz será atualizado em até 1 minuto.');await loadStatus();}));
+if(element('bridge-history')) {
   setInterval(function updateJobs(){if(!element('panel').hidden)loadStatus().catch(function error(e){if(e.status===401)loginRequired();else message(e.message);});},10000);
 }

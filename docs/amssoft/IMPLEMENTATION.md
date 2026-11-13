@@ -23,3 +23,11 @@ Both JSON middleware instances reject compressed request bodies (`inflate: false
 ## Status publication and Postiz bridge
 
 The operator now has a persistent SQLite publication queue, local MP4 catalog, manual/scheduled publication, daily recurrence, and a history distinguishing server confirmation, owner confirmation, preflight waiting and unknown outcomes. It permits only the privately configured account and one active send. Message ids are persisted before calling WhatsApp; uncertain outcomes are never automatically resent. The private media roots are read-only mounts, with traversal/symlink/type/size checks. Automation uses a separate runtime-mounted token; human publication controls remain behind password and TOTP. The Postiz whatsapp-status provider creates idempotent jobs and polls until publication is confirmed. No chat or group send route is exposed.
+
+## Bridge-only publishing contract (2026-11-13)
+
+Postiz owns the calendar and recurrence. The operator has no media catalogue, manual publisher, scheduling endpoint, recurrence settings, local planner or future-dated job API. Its UI provides pairing, protected history and owner reconciliation of an unknown send result.
+
+At publication time, Postiz calls POST /automation/jobs with only id, file (relative to the read-only Postiz upload volume), and optional caption. Any scheduling/additional fields are rejected. The bridge persists the request and sends as soon as the configured account is available; it does not choose a new publication date. GET job status feeds the Postiz pending-publication workflow. Request identity is immutable; independent occurrences are not merged by content/time.
+
+The folder discovery script belongs to Postiz deployment automation, outside this bridge, and creates native Postiz recurring posts. Preserve its existing post IDs/state when moving it. Runtime must not mount the source advertising folder into the operator. Old manual scheduling routes return 404. Legacy database rows/tables may remain for history and rollback but no active code uses them as a calendar.
