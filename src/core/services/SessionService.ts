@@ -164,6 +164,9 @@ export class SessionService {
 
   async upsertAndStartSession(name: string, config: any): Promise<SessionDTO> {
     return this.manager.withLock(name, async () => {
+      if (!(await this.manager.exists(name))) {
+        throw new NotFoundException('Create the session using POST /api/sessions first');
+      }
       await this.manager.upsert(name, config);
       await this.manager.assign(name);
       return this.manager.start(name);

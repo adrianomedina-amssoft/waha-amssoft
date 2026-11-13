@@ -406,6 +406,9 @@ export class WhatsappSessionGoWSCore extends WhatsappSession {
           WhatsMeowEvent.HistorySync,
           WhatsMeowEvent.Contact,
         ];
+        if (process.env.AMSSOFT_STATUS_ONLY === 'true') {
+          exclude.push(WhatsMeowEvent.MESSAGE, WhatsMeowEvent.UNDECRYPTABLE_MESSAGE);
+        }
         const request = new messages.StreamEventsRequest({
           session: this.session,
           exclude: exclude,

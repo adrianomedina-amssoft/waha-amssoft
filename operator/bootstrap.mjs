@@ -1,0 +1,15 @@
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { openAuth } from './auth.mjs';
+const directory = process.env.OPERATOR_DATA_DIR || '/data';
+const state = join(directory, 'operator.json');
+if (existsSync(state)) throw new Error('Operator already provisioned; refuse to overwrite');
+const password = readFileSync(process.argv[2], 'utf8').trim();
+if (password.length < 20) throw new Error('Bootstrap password must contain at least 20 characters');
+const secret = readFileSync(process.env.OPERATOR_SECRET_FILE, 'utf8').trim();
+const { auth, database } = await openAuth({ filename: join(directory, 'auth.sqlite'), origin: process.env.OPERATOR_ORIGIN, secret, bootstrap: true });
+const result = await auth.api.signUpEmail({ body: { email: 'admin@status.invalid', password, name: 'AMS SOFT' } });
+database.prepare('DELETE FROM session').run();
+writeFileSync(state, JSON.stringify({ administratorId: result.user.id }), { mode: 0o600, flag: 'wx' });
+database.close();
+console.log('Operator provisioned. TOTP enrollment is required on first login.');

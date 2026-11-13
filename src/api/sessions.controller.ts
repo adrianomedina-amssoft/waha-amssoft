@@ -228,12 +228,16 @@ class SessionsController {
 
   @Post('/start/')
   @ApiOperation({
-    summary: 'Upsert and Start session',
+    summary: 'Configure and start an existing session',
     description:
-      'Create session (if not exists) or update a config (if exists) and start it.',
+      'Update an existing session configuration and start it. Creation requires POST /api/sessions.',
     deprecated: true,
   })
-  @CheckPolicies(CanSession(Action.Control, FromBody('name')))
+  @CheckPolicies(
+    CanSession(Action.Control, FromBody('name')),
+    CanSession(Action.Setting, FromBody('name')),
+  )
+  @UsePipes(new WAHAValidationPipe())
   async DEPRACATED_start(
     @Body() request: SessionStartDeprecatedRequest,
   ): Promise<SessionDTO> {
@@ -257,7 +261,14 @@ class SessionsController {
     description: 'Stop session and Logout by default.',
     deprecated: true,
   })
-  @CheckPolicies(CanSession(Action.Control, FromBody('name')))
+  @CheckPolicies(
+    CanSession(Action.Control, FromBody('name')),
+    (ability, context) => {
+      const request = context.switchToHttp().getRequest();
+      return !request.body?.logout || CanSession(Action.Delete, FromBody('name'))(ability, context);
+    },
+  )
+  @UsePipes(new WAHAValidationPipe())
   async DEPRECATED_stop(
     @Body() request: SessionStopDeprecatedRequest,
   ): Promise<void> {
@@ -277,7 +288,11 @@ class SessionsController {
     description: 'Stop, Logout and Delete session.',
     deprecated: true,
   })
-  @CheckPolicies(CanSession(Action.Control, FromBody('name')))
+  @CheckPolicies(
+    CanSession(Action.Control, FromBody('name')),
+    CanSession(Action.Delete, FromBody('name')),
+  )
+  @UsePipes(new WAHAValidationPipe())
   async DEPRECATED_logout(
     @Body() request: SessionLogoutDeprecatedRequest,
   ): Promise<void> {
