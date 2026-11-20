@@ -100,24 +100,79 @@ element('refresh').addEventListener('click', run(async function refresh() {
 element('logout').addEventListener('click', run(async function logout() { stopPolling(); await api('/auth/sign-out', {}); location.reload(); }));
 (async function restore() { try { const current = await api('/auth/get-session'); if (current?.session?.operatorMfa && current.user?.twoFactorEnabled) await panel(); } catch (error) { message(error.message); } })();
 
+let snapshot;
+let historyRequest;
+
+function visibleJob(job) {
+  const kind = element('job-kind').value;
+  const state = element('job-state').value;
+  const deliveries = job.deliveries || [];
+  const states = [job.state, ...deliveries.map(delivery => delivery.state)];
+  const filters = {
+    pending: ['UNKNOWN'], active: ['QUEUED', 'WAITING', 'SENDING'],
+    done: ['SENT', 'CONFIRMED'], failed: ['FAILED'],
+  };
+  return (kind === 'all' || kind === (job.kind || 'status'))
+    && (state === 'all' || filters[state].some(value => states.includes(value)));
+}
+
 async function loadStatus() {
-  const data = await api('/status');
+  if (historyRequest) return historyRequest;
+  historyRequest = (async function updateHistory() {
+    try {
+      const data = await api('/status');
+      if (JSON.stringify(data) !== JSON.stringify(snapshot) || element('jobs-feedback').textContent.startsWith('Não foi possível')) {
+        snapshot = data;
+        renderHistory();
+      }
+    } catch (error) {
+      element('jobs-feedback').textContent = 'Não foi possível atualizar as publicações.';
+      throw error;
+    } finally {
+      historyRequest = null;
+    }
+  })();
+  return historyRequest;
+}
+
+function renderHistory() {
+  if (!snapshot) return;
+  const data = snapshot;
+  const jobs = data.jobs.filter(visibleJob);
+  element('jobs-feedback').textContent = jobs.length ? '' : 'Nenhuma publicação encontrada.';
+  const groups = element('group-list');
+  groups.replaceChildren();
+  for (const label of data.groups?.length ? [...data.groups].sort((a, b) => a.localeCompare(b, 'pt-BR')) : [data.groups ? 'Nenhum grupo autorizado.' : 'Consulta a grupos indisponível.']) {
+    const item = document.createElement('li');
+    item.textContent = label;
+    groups.append(item);
+  }
   const labels={QUEUED:'Recebido do Postiz',WAITING:'Aguardando conexão',SENDING:'Enviando — sem confirmação ainda',SENT:'Confirmado pelo servidor',CONFIRMED:'Confirmado no celular',UNKNOWN:'Verificar resultado no celular',FAILED:'Falha'};
-  const container=element('jobs'); container.replaceChildren();
-  for(const job of data.jobs) { const row=document.createElement('article'); row.className='job'; const title=document.createElement('strong'); title.textContent=job.file; row.append(title);
+  const container=element('jobs'); const open = new Set([...container.querySelectorAll('details[open]')].map(detail => detail.dataset.job));
+  container.replaceChildren();
+  for(const job of jobs) { const row=document.createElement('article'); row.className='job'; row.dataset.pending=String(job.state==='UNKNOWN'||Boolean(job.summary?.unknown)); const title=document.createElement('strong'); title.textContent=(job.kind==='groups'?'Grupos':'Status')+' · '+job.file; row.append(title);
     const info=document.createElement('p');info.textContent=new Date(job.receivedAt).toLocaleString('pt-BR',{timeZone:data.timezone})+' · '+(labels[job.state]||job.state);row.append(info);
     if(job.error){const detail=document.createElement('p');detail.textContent=job.error;row.append(detail);}
     if(job.kind!=='groups' && job.state==='UNKNOWN')for(const [action,label]of [['confirmed','Já apareceu no celular'],['not-sent','Não foi publicado']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',run(async function resolve(){await api('/status/resolve',{id:job.id,action:action});await loadStatus();}));row.append(button);}
     if(job.kind==='groups') {
       const summary=document.createElement('p');summary.textContent='Grupos: '+job.summary.sent+'/'+job.summary.total+' confirmados; '+job.summary.failed+' falhas; '+job.summary.unknown+' sem confirmação';row.append(summary);
-      for(const delivery of job.deliveries.filter(d=>['UNKNOWN','FAILED'].includes(d.state))) {
-        const detail=document.createElement('p');detail.textContent=delivery.title+' · '+delivery.state+' · '+(delivery.error||'');row.append(detail);
-        if(delivery.state==='UNKNOWN')for(const [action,label]of [['confirmed','Envio confirmado neste grupo'],['not-sent','Não publicado neste grupo']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',run(async function resolveGroup(){await api('/status/resolve',{id:job.id,kind:'groups',groupId:delivery.groupId,action:action});await loadStatus();}));row.append(button);}
+      const details = document.createElement('details');
+      details.dataset.job = job.id;
+      details.open = open.has(job.id) || job.summary.unknown > 0;
+      const disclosure = document.createElement('summary');
+      disclosure.textContent = 'Ver entregas por grupo';
+      details.append(disclosure);
+      row.append(details);
+      for (const delivery of job.deliveries) {
+        const detail=document.createElement('p');detail.textContent=delivery.title+' · '+(labels[delivery.state]||delivery.state)+(delivery.error?' · '+delivery.error:'');details.append(detail);
+        if(delivery.state==='UNKNOWN')for(const [action,label]of [['confirmed','Envio confirmado neste grupo'],['not-sent','Não publicado neste grupo']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',run(async function resolveGroup(){await api('/status/resolve',{id:job.id,kind:'groups',groupId:delivery.groupId,action:action});await loadStatus();}));details.append(button);}
       }
     }
     container.append(row);
   }
 }
 if(element('bridge-history')) {
+  element('job-kind').addEventListener('change', renderHistory);
+  element('job-state').addEventListener('change', renderHistory);
   setInterval(function updateJobs(){if(!element('panel').hidden)loadStatus().catch(function error(e){if(e.status===401)loginRequired();else message(e.message);});},10000);
 }

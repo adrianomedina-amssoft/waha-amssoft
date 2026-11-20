@@ -12,7 +12,7 @@ test('bridge exposes no publishing or scheduling routes even for enrolled operat
   async function post(path,body){return fetch(base+path,{method:'POST',headers:{Origin:'http://localhost:8080','Content-Type':'application/json',Authorization:'Bearer fixture-key'},body:JSON.stringify(body)});}
   try {
     for(const path of ['/status/jobs','/status/config'])assert.equal((await post(path,{})).status,404);
-    const summary=await(await fetch(base+'/status')).json();assert.deepEqual(Object.keys(summary).sort(),['jobs','timezone']);
+    const summary=await(await fetch(base+'/status')).json();assert.deepEqual(Object.keys(summary).sort(),['groups','jobs','timezone']);
     for(const field of ['due','dueLocal','scheduledAt','interval_minutes'])assert.equal((await post('/automation/jobs',{id:'fixture-id',file:'fixture.mp4',[field]:'future'})).status,400);
     assert.equal(received.length,0);
     assert.equal((await post('/automation/jobs',{id:'fixture-id',file:'fixture.mp4',caption:'fixture'})).status,202);

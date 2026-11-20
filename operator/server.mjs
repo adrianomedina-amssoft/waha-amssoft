@@ -77,7 +77,7 @@ export async function createOperator({ auth, administratorId, origin, upstream, 
   });
   app.get('/status', function overview(req, res) {
     if (!statusService) return res.sendStatus(503);
-    res.json({ jobs: [...statusService.list(), ...(groupService ? groupService.list() : [])].sort(function newest(a,b) { return b.receivedAt-a.receivedAt; }), timezone: timezone });
+    res.json({ jobs: [...statusService.list(), ...(groupService ? groupService.list() : [])].sort(function newest(a,b) { return b.receivedAt-a.receivedAt; }), timezone: timezone, groups: groupService ? groupService.catalog().map(group => group.title) : null });
   });
   app.post('/status/resolve', function resolveJob(req, res) {
     try { if (!statusService) return res.sendStatus(503); res.json(req.body.kind === 'groups' && groupService ? groupService.resolve(req.body.id, req.body.groupId, req.body.action) : statusService.resolveUnknown(req.body.id, req.body.action)); } catch (error) { res.status(400).json({ error: error.message }); }
