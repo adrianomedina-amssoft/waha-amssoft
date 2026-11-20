@@ -1,0 +1,9 @@
+# Release context contains only CI-built application output and locked operator dependencies.
+FROM devlikeapro/waha:gows-2026.10.1@sha256:1f7faeb0227ad5edb5711f7058bfce807ea65e5f92234af0778e4db140f6eb46
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.source="https://github.com/adrianomedina-amssoft/waha-amssoft" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}"
+USER root
+COPY --chown=1000:1000 dist/ /app/dist/
+COPY --chown=1000:1000 operator/ /app/operator/
+USER 1000:1000

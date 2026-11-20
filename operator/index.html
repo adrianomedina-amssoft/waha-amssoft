@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AMS SOFT · Status WhatsApp</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer>
+</script>
+</head>
+<body>
+<main>
+<header>
+<p class="brand">AMS SOFT</p>
+<h1>Central WhatsApp</h1>
+</header>
+<p id="message" role="status">
+</p>
+<form id="login">
+<label>Senha<input id="password" type="password" autocomplete="current-password" required>
+</label>
+<button>Entrar</button>
+</form>
+<section id="setup" hidden>
+<h2>Ativar segundo fator</h2>
+<p>Escaneie este QR Code no aplicativo autenticador. Guarde o acesso ao aplicativo.</p>
+<img id="setupqr" alt="QR Code do autenticador">
+<p>Depois informe o código de 6 dígitos abaixo.</p>
+</section>
+<form id="totp" hidden>
+<label>Código do autenticador<input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+</label>
+<button>Verificar código</button>
+</form>
+<section id="panel" hidden>
+<nav aria-label="Operação">
+<a href="#connection-card">Conexão</a>
+<a href="#bridge-history">Publicações</a>
+<a href="#authorized-groups">Grupos autorizados</a>
+<a href="https://postiz.amssoft.com.br/launches" rel="noreferrer">Calendário no Postiz ↗</a>
+</nav>
+<section class="card" id="connection-card">
+<h2>Conexão</h2>
+<p id="connection">
+</p>
+<button id="start" type="button">Conectar WhatsApp</button>
+<button id="refresh" type="button">Atualizar conexão / QR Code</button>
+<img id="pairqr" alt="QR Code para vincular o WhatsApp" hidden>
+<p>No WhatsApp, abra Aparelhos conectados → Conectar aparelho e escaneie o QR Code.</p>
+</section>
+<section class="card" id="bridge-history">
+<h2>Publicações recentes</h2>
+<p>Até 150 registros de Status e 20 lotes de grupos.</p>
+<div class="filters">
+<label>Tipo<select id="job-kind">
+<option value="all">Todos</option>
+<option value="status">Status</option>
+<option value="groups">Grupos</option>
+</select>
+</label>
+<label>Situação<select id="job-state">
+<option value="all">Todas</option>
+<option value="pending">Pendências de conferência</option>
+<option value="active">Em andamento</option>
+<option value="done">Confirmadas</option>
+<option value="failed">Com falhas</option>
+</select>
+</label>
+</div>
+<p>Publicações, horários e repetição são gerenciados no <a href="https://postiz.amssoft.com.br/launches" rel="noreferrer">Postiz</a>. Esta ponte envia quando o Postiz solicita e informa o resultado.</p>
+<p>Resultados desconhecidos exigem conferência no celular antes de qualquer nova tentativa.</p>
+<p id="jobs-feedback" role="status">Carregando publicações…</p>
+<div id="jobs">
+</div>
+</section>
+<section class="card" id="authorized-groups">
+<h2>Grupos autorizados</h2>
+<ul id="group-list">
+</ul>
+</section>
+<button id="logout" type="button">Sair</button>
+</section>
+</main>
+</body>
+</html>
